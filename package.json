@@ -1,0 +1,45 @@
+{
+  "name": "ims-avalon",
+  "private": true,
+  "version": "1.0.0",
+  "description": "IMS — Inventory Management System by Avalon Digital",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "./bin/pnpm --filter web dev",
+    "build": "./bin/pnpm --filter web build",
+    "preview": "./bin/pnpm --filter web preview",
+    "lint": "PATH=\"./bin:$PATH\" ./bin/pnpm -r lint",
+    "typecheck": "PATH=\"./bin:$PATH\" ./bin/pnpm -r typecheck",
+    "test": "PATH=\"./bin:$PATH\" ./bin/pnpm -r test",
+    "test:coverage": "PATH=\"./bin:$PATH\" ./bin/pnpm -r test:coverage",
+    "test:rules": "node --experimental-vm-modules node_modules/.bin/jest firestore.rules.test.ts --testEnvironment node",
+    "test:e2e": "./bin/pnpm --filter web test:e2e",
+    "emulators": "firebase emulators:start --import=.emulator-data --export-on-exit=.emulator-data",
+    "emulators:seed": "firebase emulators:exec --import=.emulator-data \"tsx scripts/seed.ts\"",
+    "deploy:staging": "firebase use staging && ./bin/pnpm build && firebase deploy",
+    "deploy:prod": "firebase use production && ./bin/pnpm build && firebase deploy",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase-tools": "^13.0.0",
+    "husky": "^9.0.0",
+    "jest": "^29.0.0",
+    "lint-staged": "^15.0.0",
+    "ts-jest": "^29.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
+  }
+}

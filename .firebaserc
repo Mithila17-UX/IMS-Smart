@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "ims-avalon-dev",
+    "staging": "ims-avalon-staging",
+    "production": "ims-avalon-prod"
+  }
+}

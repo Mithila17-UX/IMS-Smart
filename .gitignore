@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Firebase
+.firebase/
+.emulator-data/
+*.log
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+/coverage
+/playwright-report
+/test-results
+
+# TypeScript
+*.tsbuildinfo

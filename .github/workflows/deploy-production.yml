@@ -1,0 +1,47 @@
+name: Deploy — Production
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    # Manual approval gate configured in GitHub → Settings → Environments → production
+    environment: production
+    env:
+      VITE_FIREBASE_API_KEY: ${{ secrets.PROD_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.PROD_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ secrets.PROD_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.PROD_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ secrets.PROD_FIREBASE_APP_ID }}
+      VITE_USE_EMULATORS: "false"
+      VITE_APP_NAME: IMS
+      VITE_APP_COMPANY: "Avalon Digital"
+      VITE_APP_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Deploy to Firebase Production
+        run: firebase deploy --only hosting,firestore:rules,storage:rules,functions --project production
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      - name: Tag deployment in audit
+        run: echo "Deployed ${{ github.ref_name }} to production at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

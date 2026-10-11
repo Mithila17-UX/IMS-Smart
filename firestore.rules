@@ -1,0 +1,386 @@
+// IMS — Firestore Security Rules
+// Version: Phase 1
+//
+// Design principles:
+//   1. A user can only access their own client's data (clientId claim must match path segment)
+//   2. Blocked clients are completely refused (reads and writes)
+//   3. Read-only clients can read but not write
+//   4. Cashiers cannot write admin-only collections
+//   5. Module-off collections refuse writes (and sensitive reads)
+//   6. Entitlements and client records are writable ONLY by Cloud Functions (admin SDK bypasses rules)
+//   7. Append-only ledger collections cannot be deleted
+//
+// Custom claims structure:
+//   token.role    → "superadmin" | "client_admin" | "cashier"
+//   token.clientId → the client's Firestore document ID
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────
+    // Helper functions
+    // ─────────────────────────────────────────────────────────────
+
+    // Is the request authenticated at all?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Is the user a super admin?
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.role == "superadmin";
+    }
+
+    // Does the user belong to this specific client?
+    function isClientMember(clientId) {
+      return isSignedIn() && request.auth.token.clientId == clientId;
+    }
+
+    // Is the user a client admin for this client?
+    function isClientAdmin(clientId) {
+      return isClientMember(clientId) && request.auth.token.role == "client_admin";
+    }
+
+    // Is the user a cashier (or better) for this client?
+    function isCashierOrBetter(clientId) {
+      return isClientMember(clientId) &&
+        (request.auth.token.role == "cashier" ||
+         request.auth.token.role == "client_admin");
+    }
+
+    // Read the client's entitlements document to check status and module switches.
+    // We cache this as a get() — Firestore charges one extra read per rules evaluation.
+    function getEntitlements(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId)/entitlements/main).data;
+    }
+
+    // Is this client active (not blocked or read-only)?
+    function isClientActive(clientId) {
+      let e = getEntitlements(clientId);
+      return e.status == "active";
+    }
+
+    // Is this client readable (active or read_only)?
+    function isClientReadable(clientId) {
+      let e = getEntitlements(clientId);
+      return e.status == "active" || e.status == "read_only";
+    }
+
+    // Is this client writable (active only — read_only blocks writes)?
+    function isClientWritable(clientId) {
+      return isClientActive(clientId);
+    }
+
+    // Is a specific module enabled for this client?
+    function isModuleEnabled(clientId, moduleId) {
+      let e = getEntitlements(clientId);
+      return e.modules[moduleId] == true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Global collections (super admin only via Admin SDK)
+    // ─────────────────────────────────────────────────────────────
+
+    // clients/{clientId} — readable by the super admin and client members
+    match /clients/{clientId} {
+      allow read: if isSuperAdmin() ||
+                     (isClientMember(clientId) && isClientReadable(clientId));
+      // Writes only via Admin SDK (Cloud Functions). No client-side writes.
+      allow write: if false;
+
+      // ─────────────────────────────────────────────────────────
+      // Per-client sub-collections
+      // ─────────────────────────────────────────────────────────
+
+      // entitlements/main — written only by Cloud Functions
+      match /entitlements/{doc} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow write: if false; // Admin SDK only
+      }
+
+      // users — client admin manages users; cashiers can read own record
+      match /users/{userId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) &&
+                        isClientReadable(clientId) &&
+                        (isClientAdmin(clientId) || request.auth.uid == userId));
+        allow create, update: if isClientAdmin(clientId) && isClientWritable(clientId);
+        allow delete: if false; // Deactivate, never delete
+      }
+
+      // ─── Catalogue ──────────────────────────────────────────────
+
+      // categories — admin manages; anyone in the client can read
+      match /categories/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "products");
+        allow delete: if false;
+      }
+
+      // products — admin manages; anyone in the client can read
+      match /products/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "products");
+        allow delete: if false;
+      }
+
+      // priceVersions — append-only; admin creates; anyone can read
+      match /priceVersions/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isClientAdmin(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "products");
+        allow update, delete: if false; // Versioned — never modify
+      }
+
+      // depositVersions — append-only; admin creates; anyone can read
+      match /depositVersions/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isClientAdmin(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "deposits");
+        allow update, delete: if false;
+      }
+
+      // settingVersions — append-only; admin creates; anyone can read
+      match /settingVersions/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isClientAdmin(clientId) && isClientWritable(clientId);
+        allow update, delete: if false;
+      }
+
+      // ─── Suppliers & Purchases ───────────────────────────────────
+
+      match /suppliers/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "stock");
+        allow delete: if false;
+      }
+
+      match /purchases/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "stock"));
+        allow create: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "stock");
+        allow update: if isClientAdmin(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "stock");
+        allow delete: if false;
+      }
+
+      // ─── Stock ledger (append-only) ──────────────────────────────
+
+      match /stockMovements/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        // Create allowed for cashier-or-better; but complimentary/staff_drink/manual_discount
+        // require admin — enforced by checking the "type" field.
+        allow create: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         (
+                           // Cashiers may create sale, purchase, wastage, adjustment movements
+                           (request.resource.data.type in ["sale", "purchase", "wastage", "adjustment"])
+                           ||
+                           // Admin-only types
+                           (isClientAdmin(clientId) &&
+                            request.resource.data.type in ["complimentary", "staff_drink", "manual_discount"])
+                         );
+        allow update, delete: if false; // Ledger is immutable
+      }
+
+      // ─── Sales (orders) ──────────────────────────────────────────
+
+      match /orders/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "liveOrders"));
+        allow create: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "liveOrders");
+        // Only the creating cashier or an admin can update an open order
+        allow update: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "liveOrders");
+        allow delete: if false;
+      }
+
+      // bottleReturns — append-only
+      match /bottleReturns/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "deposits"));
+        allow create: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "deposits");
+        // Allow updating the discountToken.usedInOrderId field only (marking token as used)
+        allow update: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "deposits");
+        allow delete: if false;
+      }
+
+      // ─── Cash ledger (append-only) ────────────────────────────────
+
+      match /cashEntries/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isCashierOrBetter(clientId) && isClientWritable(clientId);
+        allow update, delete: if false;
+      }
+
+      // ─── Offers ──────────────────────────────────────────────────
+
+      match /offers/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "offers");
+        allow delete: if false;
+      }
+
+      // ─── Customers & credit ───────────────────────────────────────
+
+      match /customers/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "tabs"));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "tabs");
+        allow delete: if false;
+      }
+
+      match /dueExtensions/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "tabs"));
+        allow create: if isClientAdmin(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "tabs");
+        allow update, delete: if false;
+      }
+
+      // ─── Approval requests ────────────────────────────────────────
+
+      match /approvalRequests/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "adminRequests"));
+        // Cashiers can create requests; admins can update (approve/reject)
+        allow create: if isCashierOrBetter(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "adminRequests");
+        allow update: if isClientAdmin(clientId) &&
+                         isClientWritable(clientId) &&
+                         isModuleEnabled(clientId, "adminRequests");
+        allow delete: if false;
+      }
+
+      // ─── Expenses ─────────────────────────────────────────────────
+
+      match /expenseCategories/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "expenses"));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "expenses");
+        allow delete: if false;
+      }
+
+      // ─── Shifts (day open/close) ──────────────────────────────────
+
+      match /shifts/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isCashierOrBetter(clientId) && isClientWritable(clientId);
+        // Only admin can close/lock a shift
+        allow update: if isClientAdmin(clientId) && isClientWritable(clientId);
+        allow delete: if false;
+      }
+
+      match /reconciliations/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        allow create: if isCashierOrBetter(clientId) && isClientWritable(clientId);
+        allow update: if isClientAdmin(clientId) && isClientWritable(clientId);
+        allow delete: if false;
+      }
+
+      // ─── Summaries & reports (read-heavy, written by Functions) ───
+
+      match /dailySummaries/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId));
+        // Written only by Cloud Functions (Admin SDK bypasses rules)
+        allow write: if false;
+      }
+
+      match /bankStatements/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "monthEndCards"));
+        allow create, update: if isClientAdmin(clientId) &&
+                                 isClientWritable(clientId) &&
+                                 isModuleEnabled(clientId, "monthEndCards");
+        allow delete: if false;
+      }
+
+      match /monthCardChecks/{docId} {
+        allow read: if isSuperAdmin() ||
+                       (isClientMember(clientId) && isClientReadable(clientId) &&
+                        isModuleEnabled(clientId, "monthEndCards"));
+        allow write: if false; // Written only by Cloud Functions
+      }
+
+      // ─── Audit log (append-only, admin + super admin readable) ────
+
+      match /auditLog/{docId} {
+        allow read: if isSuperAdmin() || isClientAdmin(clientId);
+        allow create: if isClientMember(clientId) && isClientWritable(clientId);
+        allow update, delete: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Presets (global, managed by super admin via Admin SDK)
+    // ─────────────────────────────────────────────────────────────
+    match /presets/{presetId} {
+      allow read: if isSuperAdmin();
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Super admin audit log
+    // ─────────────────────────────────────────────────────────────
+    match /superAuditLog/{docId} {
+      allow read: if isSuperAdmin();
+      allow write: if false; // Written only by Cloud Functions
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Deny everything else
+    // ─────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

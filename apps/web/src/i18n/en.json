@@ -1,0 +1,52 @@
+{
+  "app": {
+    "title": "IMS",
+    "company": "Avalon Digital",
+    "tagline": "Inventory, Sales & Cash Reconciliation System"
+  },
+  "roles": {
+    "superadmin": "Super Admin",
+    "client_admin": "Client Admin",
+    "cashier": "Cashier"
+  },
+  "status": {
+    "active": "Active",
+    "read_only": "Read Only",
+    "blocked": "Blocked"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "sales": "Sales & Tally",
+    "products": "Products",
+    "stock": "Stock & Supplies",
+    "shifts": "Day Close",
+    "credit": "Tabs & Credit",
+    "offers": "Offers",
+    "expenses": "Expenses",
+    "reports": "Reports",
+    "settings": "Settings",
+    "super": "Super Admin Console",
+    "logout": "Log Out"
+  },
+  "auth": {
+    "login": "Sign In",
+    "email": "Email Address",
+    "password": "Password",
+    "signInButton": "Sign In",
+    "loggingIn": "Signing in...",
+    "errorInvalid": "Invalid email or password",
+    "supportModeActive": "Support Mode Active — Viewing as Client (Read-Only)"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "search": "Search...",
+    "back": "Back",
+    "history": "History",
+    "effectiveFrom": "Effective From"
+  }
+}
