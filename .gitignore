@@ -31,9 +31,9 @@ build/
 Thumbs.db
 
 # Test artifacts
-/coverage
-/playwright-report
-/test-results
+coverage/
+playwright-report/
+test-results/
 
 # TypeScript
 *.tsbuildinfo

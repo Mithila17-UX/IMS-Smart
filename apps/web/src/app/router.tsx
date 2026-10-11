@@ -5,6 +5,8 @@ import { AppShell } from "@/ui/AppShell";
 import { EntitlementGuard } from "@/ui/EntitlementGuard";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { ProductsPage } from "@/features/products/ProductsPage";
+import { StockPage } from "@/features/stock/StockPage";
 import { SuperAdminLayout } from "@/features/super/SuperAdminLayout";
 import { ClientsListPage } from "@/features/super/ClientsListPage";
 import { CreateClientPage } from "@/features/super/CreateClientPage";
@@ -60,7 +62,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="products">
         <AppShell>
-          <ModulePlaceholder name="Products Catalogue & Categories" phase="Phase 2" />
+          <ProductsPage />
         </AppShell>
       </EntitlementGuard>
     ),
@@ -70,7 +72,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="stock">
         <AppShell>
-          <ModulePlaceholder name="Stock & Deliveries" phase="Phase 2" />
+          <StockPage />
         </AppShell>
       </EntitlementGuard>
     ),

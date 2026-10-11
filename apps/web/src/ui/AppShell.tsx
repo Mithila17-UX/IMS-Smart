@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/useAuth";
 import { isEnabled } from "@/domain/entitlements";
@@ -23,6 +23,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { GlobalProductSearchModal } from "@/features/products/GlobalProductSearchModal";
+
 interface NavItem {
   name: string;
   href: string;
@@ -36,6 +38,21 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "/" &&
+        !["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)
+      ) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const navItems: NavItem[] = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, moduleId: "dashboard" },
@@ -110,17 +127,21 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </Link>
         </div>
 
-        {/* Global Product Search Trigger (Phase 2 connects full modal) */}
+        {/* Global Product Search Trigger */}
         <div className="hidden max-w-sm flex-1 px-6 md:block">
-          <div className="relative">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="w-full relative text-left cursor-pointer"
+          >
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               readOnly
               placeholder="Search products, brands (Press /)"
-              className="w-full min-h-[40px] rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-300 placeholder-slate-500 focus:outline-none"
+              className="w-full min-h-[40px] cursor-pointer rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-300 placeholder-slate-500 hover:border-slate-700 focus:outline-none"
             />
-          </div>
+          </button>
         </div>
 
         {/* User Info & Actions */}
@@ -232,6 +253,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
+
+      <GlobalProductSearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+      />
     </div>
   );
 };
