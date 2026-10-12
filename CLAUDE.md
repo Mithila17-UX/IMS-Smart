@@ -1,6 +1,6 @@
 # IMS — Inventory Management System by Avalon Digital
 
-> **Version:** 1.1.0 | **Stack lock:** Phase 2 Catalogue and Supplies complete | **Last updated:** 2026-10-11
+> **Version:** 1.2.0 | **Stack lock:** Phase 3 Sales, Live Tally & Orders complete | **Last updated:** 2026-10-12
 
 ---
 

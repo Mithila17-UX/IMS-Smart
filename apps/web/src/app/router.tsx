@@ -11,6 +11,10 @@ import { SuperAdminLayout } from "@/features/super/SuperAdminLayout";
 import { ClientsListPage } from "@/features/super/ClientsListPage";
 import { CreateClientPage } from "@/features/super/CreateClientPage";
 import { ClientDetailPage } from "@/features/super/ClientDetailPage";
+import { SalesPage } from "@/features/sales/SalesPage";
+import { CreditPage } from "@/features/credit/CreditPage";
+import { OffersPage } from "@/features/offers/OffersPage";
+import { ExpensesPage } from "@/features/expenses/ExpensesPage";
 
 // Generic placeholder for modules scheduled in subsequent phases
 const ModulePlaceholder: React.FC<{ name: string; phase: string }> = ({ name, phase }) => (
@@ -52,7 +56,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="liveOrders">
         <AppShell>
-          <ModulePlaceholder name="Live Tally & Sales" phase="Phase 3" />
+          <SalesPage />
         </AppShell>
       </EntitlementGuard>
     ),
@@ -92,7 +96,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="tabs">
         <AppShell>
-          <ModulePlaceholder name="Tabs & Credit Accounts" phase="Phase 3" />
+          <CreditPage />
         </AppShell>
       </EntitlementGuard>
     ),
@@ -102,7 +106,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="offers">
         <AppShell>
-          <ModulePlaceholder name="Offers & Happy Hour" phase="Phase 3" />
+          <OffersPage />
         </AppShell>
       </EntitlementGuard>
     ),
@@ -112,7 +116,7 @@ export const router = createBrowserRouter([
     element: (
       <EntitlementGuard kind="module" id="expenses">
         <AppShell>
-          <ModulePlaceholder name="Expenses & Drawer Cash" phase="Phase 3" />
+          <ExpensesPage />
         </AppShell>
       </EntitlementGuard>
     ),
